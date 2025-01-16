@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   h-ui:
     image: jonssonyan/h-ui

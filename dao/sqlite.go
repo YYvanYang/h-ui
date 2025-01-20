@@ -3,19 +3,129 @@ package dao
 import (
 	"errors"
 	"fmt"
-	"github.com/glebarez/sqlite"
-	"github.com/sirupsen/logrus"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
-	"gorm.io/gorm/schema"
 	"h-ui/model/constant"
 	"log"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/glebarez/sqlite"
+	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+	"gorm.io/gorm/schema"
 )
 
-var sqlInitStr = "CREATE TABLE IF NOT EXISTS account\n(\n    id             INTEGER PRIMARY KEY AUTOINCREMENT,\n    username       TEXT    NOT NULL UNIQUE DEFAULT '',\n    pass           TEXT    NOT NULL        DEFAULT '',\n    con_pass       TEXT    NOT NULL        DEFAULT '',\n    quota          INTEGER NOT NULL        DEFAULT 0,\n    download       INTEGER NOT NULL        DEFAULT 0,\n    upload         INTEGER NOT NULL        DEFAULT 0,\n    expire_time    INTEGER NOT NULL        DEFAULT 0,\n    kick_util_time INTEGER NOT NULL        DEFAULT 0,\n    device_no      INTEGER NOT NULL        DEFAULT 3,\n    role           TEXT    NOT NULL        DEFAULT 'user',\n    deleted        INTEGER NOT NULL        DEFAULT 0,\n    create_time    TIMESTAMP               DEFAULT CURRENT_TIMESTAMP,\n    update_time    TIMESTAMP               DEFAULT CURRENT_TIMESTAMP\n);\nALTER TABLE account\n    ADD COLUMN login_at INTEGER NOT NULL DEFAULT 0;\nALTER TABLE account\n    ADD COLUMN con_at INTEGER NOT NULL DEFAULT 0;\nCREATE INDEX IF NOT EXISTS account_deleted_index ON account (deleted);\nCREATE INDEX IF NOT EXISTS account_username_index ON account (username);\nCREATE INDEX IF NOT EXISTS account_con_pass_index ON account (con_pass);\nCREATE INDEX IF NOT EXISTS account_pass_index ON account (pass);\nINSERT INTO account (id, username, pass, con_pass, quota, download, upload, expire_time, device_no, role)\nSELECT 1 ,'sysadmin', '02f382b76ca1ab7aa06ab03345c7712fd5b971fb0c0f2aef98bac9cd', 'sysadmin.sysadmin', -1, 0, 0, 253370736000000, 6, 'admin'\n    WHERE NOT EXISTS (SELECT 1 FROM account WHERE id = 1);\nCREATE TABLE IF NOT EXISTS config\n(\n    id          INTEGER PRIMARY KEY AUTOINCREMENT,\n    key         TEXT NOT NULL UNIQUE DEFAULT '',\n    value       TEXT NOT NULL        DEFAULT '',\n    remark      TEXT NOT NULL        DEFAULT '',\n    create_time TIMESTAMP            DEFAULT CURRENT_TIMESTAMP,\n    update_time TIMESTAMP            DEFAULT CURRENT_TIMESTAMP\n);\nCREATE INDEX IF NOT EXISTS config_key_index ON config (key);\nINSERT INTO config (key, value, remark)\nSELECT 'H_UI_WEB_PORT', '8081', 'H UI Web Port'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'H_UI_WEB_PORT');\nINSERT INTO config (key, value, remark)\nSELECT 'H_UI_WEB_CONTEXT', '/', 'H UI Web Context'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'H_UI_WEB_CONTEXT');\nINSERT INTO config (key, value, remark)\nSELECT 'H_UI_CRT_PATH', '', 'H UI Crt File Path'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'H_UI_CRT_PATH');\nINSERT INTO config (key, value, remark)\nSELECT 'H_UI_KEY_PATH', '', 'H UI Key File Path'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'H_UI_KEY_PATH');\nINSERT INTO config (key, value, remark)\nSELECT 'JWT_SECRET', hex(randomblob(10)), 'JWT Secret'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'JWT_SECRET');\nINSERT INTO config (key, value, remark)\nSELECT 'HYSTERIA2_ENABLE', '0', 'Hysteria2 Switch'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'HYSTERIA2_ENABLE');\nINSERT INTO config (key, value, remark)\nSELECT 'HYSTERIA2_CONFIG', '', 'Hysteria2 Config'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'HYSTERIA2_CONFIG');\nINSERT INTO config (key, value, remark)\nSELECT 'HYSTERIA2_TRAFFIC_TIME', '1', 'Hysteria2 Traffic Time'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'HYSTERIA2_TRAFFIC_TIME');\nINSERT INTO config (key, value, remark)\nSELECT 'HYSTERIA2_CONFIG_REMARK', '', 'Hysteria2 Config Remark'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'HYSTERIA2_CONFIG_REMARK');\nINSERT INTO config (key, value, remark)\nSELECT 'HYSTERIA2_CONFIG_PORT_HOPPING', '', 'Hysteria2 Config Port Hopping'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'HYSTERIA2_CONFIG_PORT_HOPPING');\nINSERT INTO config (key, value, remark)\nSELECT 'RESET_TRAFFIC_CRON', '', 'Reset Traffic Cron'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'RESET_TRAFFIC_CRON');\nINSERT INTO config (key, value, remark)\nSELECT 'TELEGRAM_ENABLE', '0', 'Telegram Switch'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'TELEGRAM_ENABLE');\nINSERT INTO config (key, value, remark)\nSELECT 'TELEGRAM_TOKEN', '', 'Telegram Token'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'TELEGRAM_TOKEN');\nINSERT INTO config (key, value, remark)\nSELECT 'TELEGRAM_CHAT_ID', '', 'Telegram ChatId'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'TELEGRAM_CHAT_ID');\nINSERT INTO config (key, value, remark)\nSELECT 'TELEGRAM_LOGIN_JOB_ENABLE', '0', 'TELEGRAM LOGIN Notification'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'TELEGRAM_LOGIN_JOB_ENABLE');\nINSERT INTO config (key, value, remark)\nSELECT 'TELEGRAM_LOGIN_JOB_TEXT', '[time], [username] logged into the panel, IP address is [ip]', 'TELEGRAM LOGIN Notification Text'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'TELEGRAM_LOGIN_JOB_TEXT');\nINSERT INTO config (key, value, remark)\nSELECT 'CLASH_EXTENSION', '', 'Clash Subscription Extension'\n    WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'CLASH_EXTENSION');"
+var sqlInitStr = `
+CREATE TABLE IF NOT EXISTS account (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    username       TEXT    NOT NULL UNIQUE DEFAULT '',
+    pass           TEXT    NOT NULL        DEFAULT '',
+    con_pass       TEXT    NOT NULL        DEFAULT '',
+    quota          INTEGER NOT NULL        DEFAULT 0,
+    download       INTEGER NOT NULL        DEFAULT 0,
+    upload         INTEGER NOT NULL        DEFAULT 0,
+    expire_time    INTEGER NOT NULL        DEFAULT 0,
+    kick_util_time INTEGER NOT NULL        DEFAULT 0,
+    device_no      INTEGER NOT NULL        DEFAULT 3,
+    role           TEXT    NOT NULL        DEFAULT 'user',
+    deleted        INTEGER NOT NULL        DEFAULT 0,
+    create_time    TIMESTAMP               DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP               DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE account ADD COLUMN login_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE account ADD COLUMN con_at INTEGER NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS account_deleted_index ON account (deleted);
+CREATE INDEX IF NOT EXISTS account_username_index ON account (username);
+CREATE INDEX IF NOT EXISTS account_con_pass_index ON account (con_pass);
+CREATE INDEX IF NOT EXISTS account_pass_index ON account (pass);
+
+INSERT INTO account (id, username, pass, con_pass, quota, download, upload, expire_time, device_no, role)
+SELECT 1, 'sysadmin', '02f382b76ca1ab7aa06ab03345c7712fd5b971fb0c0f2aef98bac9cd', 'sysadmin.sysadmin', 
+       -1, 0, 0, 253370736000000, 6, 'admin'
+WHERE NOT EXISTS (SELECT 1 FROM account WHERE id = 1);
+
+CREATE TABLE IF NOT EXISTS config (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    key         TEXT NOT NULL UNIQUE DEFAULT '',
+    value       TEXT NOT NULL        DEFAULT '',
+    remark      TEXT NOT NULL        DEFAULT '',
+    create_time TIMESTAMP            DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP            DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS config_key_index ON config (key);
+
+INSERT INTO config (key, value, remark)
+SELECT 'H_UI_WEB_PORT', '8081', 'H UI Web Port'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'H_UI_WEB_PORT');
+
+INSERT INTO config (key, value, remark)
+SELECT 'H_UI_WEB_CONTEXT', '/', 'H UI Web Context'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'H_UI_WEB_CONTEXT');
+
+INSERT INTO config (key, value, remark)
+SELECT 'H_UI_CRT_PATH', '', 'H UI Crt File Path'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'H_UI_CRT_PATH');
+
+INSERT INTO config (key, value, remark)
+SELECT 'H_UI_KEY_PATH', '', 'H UI Key File Path'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'H_UI_KEY_PATH');
+
+INSERT INTO config (key, value, remark)
+SELECT 'JWT_SECRET', hex(randomblob(10)), 'JWT Secret'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'JWT_SECRET');
+
+INSERT INTO config (key, value, remark)
+SELECT 'HYSTERIA2_ENABLE', '0', 'Hysteria2 Switch'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'HYSTERIA2_ENABLE');
+
+INSERT INTO config (key, value, remark)
+SELECT 'HYSTERIA2_CONFIG', '', 'Hysteria2 Config'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'HYSTERIA2_CONFIG');
+
+INSERT INTO config (key, value, remark)
+SELECT 'HYSTERIA2_TRAFFIC_TIME', '1', 'Hysteria2 Traffic Time'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'HYSTERIA2_TRAFFIC_TIME');
+
+INSERT INTO config (key, value, remark)
+SELECT 'HYSTERIA2_CONFIG_REMARK', '', 'Hysteria2 Config Remark'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'HYSTERIA2_CONFIG_REMARK');
+
+INSERT INTO config (key, value, remark)
+SELECT 'HYSTERIA2_CONFIG_PORT_HOPPING', '', 'Hysteria2 Config Port Hopping'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'HYSTERIA2_CONFIG_PORT_HOPPING');
+
+INSERT INTO config (key, value, remark)
+SELECT 'RESET_TRAFFIC_CRON', '', 'Reset Traffic Cron'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'RESET_TRAFFIC_CRON');
+
+INSERT INTO config (key, value, remark)
+SELECT 'TELEGRAM_ENABLE', '0', 'Telegram Switch'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'TELEGRAM_ENABLE');
+
+INSERT INTO config (key, value, remark)
+SELECT 'TELEGRAM_TOKEN', '', 'Telegram Token'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'TELEGRAM_TOKEN');
+
+INSERT INTO config (key, value, remark)
+SELECT 'TELEGRAM_CHAT_ID', '', 'Telegram ChatId'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'TELEGRAM_CHAT_ID');
+
+INSERT INTO config (key, value, remark)
+SELECT 'TELEGRAM_LOGIN_JOB_ENABLE', '0', 'TELEGRAM LOGIN Notification'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'TELEGRAM_LOGIN_JOB_ENABLE');
+
+INSERT INTO config (key, value, remark)
+SELECT 'TELEGRAM_LOGIN_JOB_TEXT', '[time], [username] logged into the panel, IP address is [ip]', 'TELEGRAM LOGIN Notification Text'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'TELEGRAM_LOGIN_JOB_TEXT');
+
+INSERT INTO config (key, value, remark)
+SELECT 'CLASH_EXTENSION', '', 'Clash Subscription Extension'
+WHERE NOT EXISTS (SELECT 1 FROM config WHERE key = 'CLASH_EXTENSION');
+`
 
 var sqliteDB *gorm.DB
 
